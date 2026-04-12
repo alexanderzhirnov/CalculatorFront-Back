@@ -1,0 +1,102 @@
+package backend.back.controller;
+
+import backend.back.dto.request.CalculationRequest;
+import backend.back.dto.request.FoundationPresetRequest;
+import backend.back.dto.request.FramePresetRequest;
+import backend.back.dto.response.CalculationElementResponse;
+import backend.back.dto.response.CalculationResponse;
+import backend.back.entity.enums.CalculationStatus;
+import backend.back.service.CalculationElementService;
+import backend.back.service.CalculationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/calculations")
+@RequiredArgsConstructor
+@Tag(name = "Расчёты")
+public class CalculationController {
+
+    private final CalculationService calculationService;
+    private final CalculationElementService calculationElementService;
+
+    @GetMapping("/client/{clientId}")
+    @Operation(summary = "Список расчётов клиента")
+    public ResponseEntity<List<CalculationResponse>> getByClient(@PathVariable Long clientId) {
+        return ResponseEntity.ok(calculationService.getByClientId(clientId));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Получить расчёт по ID")
+    public ResponseEntity<CalculationResponse> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(calculationService.getById(id));
+    }
+
+    @PostMapping("/client/{clientId}")
+    @Operation(summary = "Создать новый расчёт для клиента")
+    public ResponseEntity<CalculationResponse> create(
+            @PathVariable Long clientId,
+            @RequestBody CalculationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(calculationService.create(clientId, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    @Operation(
+            summary = "Изменить статус расчёта",
+            description = "Допустимые статусы: ACTUAL, NOT_ACTUAL, CONTRACT_SIGNED")
+    public ResponseEntity<CalculationResponse> updateStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        CalculationStatus status = CalculationStatus.valueOf(body.get("status"));
+        return ResponseEntity.ok(calculationService.updateStatus(id, status));
+    }
+
+    @PostMapping("/{id}/copy")
+    @Operation(summary = "Скопировать расчёт")
+    public ResponseEntity<CalculationResponse> copy(@PathVariable Long id) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(calculationService.copy(id));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Удалить расчёт")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        calculationService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{calculationId}/frame")
+    @Operation(
+            summary = "Добавить или пересчитать каркас",
+            description = "Фронт передаёт только пользовательские параметры, сервер сам подставляет пресеты материалов")
+    public ResponseEntity<CalculationElementResponse> addFrame(
+            @PathVariable Long calculationId,
+            @Valid @RequestBody FramePresetRequest request) {
+        return ResponseEntity.ok(calculationElementService.addOrUpdateFrame(calculationId, request));
+    }
+
+    @PostMapping("/{calculationId}/foundation")
+    @Operation(
+            summary = "Добавить или пересчитать фундамент",
+            description = "Фронт передаёт только пользовательские параметры, сервер сам подставляет пресеты материалов")
+    public ResponseEntity<CalculationElementResponse> addFoundation(
+            @PathVariable Long calculationId,
+            @Valid @RequestBody FoundationPresetRequest request) {
+        return ResponseEntity.ok(calculationElementService.addOrUpdateFoundation(calculationId, request));
+    }
+}

@@ -1,88 +1,52 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: calculator-postgres
-    restart: unless-stopped
+  db:
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-calculator}
-      POSTGRES_USER: ${POSTGRES_USER:-calculator}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calculator123}
+      POSTGRES_DB: calculator_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calculator"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d calculator_db"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - calculator-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: calculator-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
     ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - calculator-network
+      - "8025:8025"
 
-  backend:
+  back:
     build:
-      context: ./backend
+      context: ./back
       dockerfile: Dockerfile
-    container_name: calculator-backend
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-calculator}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-calculator}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-calculator123}
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET:-mySecretKeyForJWTTokenGenerationAndValidation2024}
-      LIMAN_PRO_API_KEY: ${LIMAN_PRO_API_KEY:-}
-      LIMAN_PRO_API_URL: ${LIMAN_PRO_API_URL:-https://api.liman.pro}
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./logs/backend:/app/logs
-    networks:
-      - calculator-network
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/calculator_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: 1025
+      SPRING_MAIL_SMTP_AUTH: "false"
+      SPRING_MAIL_SMTP_STARTTLS: "false"
+      APP_PUBLIC_BASE_URL: http://127.0.0.1:3000
+    depends_on:
+      db:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: calculator-frontend
-    restart: unless-stopped
     depends_on:
-      - backend
+      - back
     ports:
-      - "80:80"
-    networks:
-      - calculator-network
+      - "3000:80"
 
 volumes:
   postgres_data:
-  redis_data:
-
-networks:
-  calculator-network:
-    driver: bridge
